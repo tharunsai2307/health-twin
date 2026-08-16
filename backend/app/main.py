@@ -23,9 +23,10 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="HealthTwin Backend", version="1.0.0")
 
 # CORS middleware for frontend connection
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict this to the frontend URL
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

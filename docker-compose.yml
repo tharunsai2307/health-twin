@@ -14,9 +14,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://healthtwin:healthpass@db:5432/healthtwin
-      - JWT_SECRET=production-secure-jwt-secret-replace-me
-      - ENV=production
+      - DATABASE_URL=${DATABASE_URL:-postgresql://healthtwin:healthpass@db:5432/healthtwin}
+      - JWT_SECRET=${JWT_SECRET:-production-secure-jwt-secret-replace-me}
+      - ENV=${ENV:-production}
     depends_on:
       db:
         condition: service_healthy
@@ -24,9 +24,9 @@ services:
   db:
     image: postgres:15
     environment:
-      - POSTGRES_USER=healthtwin
-      - POSTGRES_PASSWORD=healthpass
-      - POSTGRES_DB=healthtwin
+      - POSTGRES_USER=${POSTGRES_USER:-healthtwin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-healthpass}
+      - POSTGRES_DB=${POSTGRES_DB:-healthtwin}
     ports:
       - "5432:5432"
     volumes:

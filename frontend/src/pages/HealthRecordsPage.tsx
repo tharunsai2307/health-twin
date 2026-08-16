@@ -194,7 +194,7 @@ export function HealthRecordsPage() {
                 <div className="w-full h-full flex flex-col items-center justify-center p-4">
                   <span className="text-4xl">📄</span>
                   <a 
-                    href={`http://localhost:8000${previewDoc.file_path}`} 
+                    href={`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${previewDoc.file_path}`} 
                     target="_blank" 
                     rel="noreferrer"
                     className="mt-4 text-indigo-600 hover:underline text-sm font-medium"
