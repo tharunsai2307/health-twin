@@ -113,6 +113,15 @@ def get_patient_records(current_patient: models.Patient = Depends(auth.get_curre
     records = db.query(models.MedicalRecord).filter(
         models.MedicalRecord.patient_id == current_patient.id
     ).order_by(models.MedicalRecord.record_date.desc()).all()
+    # Audit log for patient accessing own records list
+    log = models.AccessLog(
+        patient_id=current_patient.id,
+        actor_id=current_patient.user_id,
+        action="Viewed own medical records list",
+        data_category="Medical Records"
+    )
+    db.add(log)
+    db.commit()
     return records
 
 @app.get("/records/{record_id}/file")
@@ -178,11 +187,11 @@ def upload_medical_record(
             detail=f"Invalid file type '{ext}'. Allowed extensions: {', '.join(allowed_exts)}"
         )
         
-    # Validate size (max 10MB)
+    # Validate size (max 5MB)
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
-    if file_size > 10 * 1024 * 1024:
+    if file_size > 5 * 1024 * 1024:
         raise HTTPException(
             status_code=400,
             detail="File size exceeds maximum permitted limit of 10MB."
@@ -731,9 +740,12 @@ def get_doctor_patient_snapshot(
     current_doctor: models.Doctor = Depends(auth.get_current_doctor),
     db: Session = Depends(get_db)
 ):
-    # Verify active, unexpired consent exists for requested category
-    has_consent = auth.check_doctor_consent(current_doctor.user_id, patient_id, "Clinical Overview", db)
-    if not has_consent:
+    # Check specific category consents
+    has_clinical_overview = auth.check_doctor_consent(current_doctor.user_id, patient_id, "Clinical Overview", db)
+    has_labs = auth.check_doctor_consent(current_doctor.user_id, patient_id, "Labs", db)
+    has_medications = auth.check_doctor_consent(current_doctor.user_id, patient_id, "Medications", db)
+    
+    if not (has_clinical_overview or has_labs or has_medications):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have active consent to access this patient's records."
@@ -753,18 +765,20 @@ def get_doctor_patient_snapshot(
     db.add(log)
     db.commit()
     
-    active_meds = [m for m in patient.medications if m.status == "active"]
-    allergies = patient.allergies
-    diagnoses = patient.diagnoses
+    active_meds = [m for m in patient.medications if m.status == "active"] if (has_clinical_overview or has_medications) else []
+    allergies = patient.allergies if has_clinical_overview else []
+    diagnoses = patient.diagnoses if has_clinical_overview else []
     
     # Format lab trends
-    trends = safety.get_lab_trend_statistics(patient.id, db)
+    trends = safety.get_lab_trend_statistics(patient.id, db) if (has_clinical_overview or has_labs) else []
     
     # Format timeline
-    events = db.query(models.MedicalEvent).filter(
-        models.MedicalEvent.patient_id == patient.id
-    ).order_by(models.MedicalEvent.event_date.desc()).limit(3).all()
-    
+    events = []
+    if has_clinical_overview:
+        events = db.query(models.MedicalEvent).filter(
+            models.MedicalEvent.patient_id == patient.id
+        ).order_by(models.MedicalEvent.event_date.desc()).limit(3).all()
+
     formatted_timeline = []
     icon_map = {"prescription": "💊", "lab": "🧪", "consultation": "🩺", "medication": "💊", "diagnosis": "📋", "general": "📄"}
     for ev in events:
@@ -780,7 +794,7 @@ def get_doctor_patient_snapshot(
         })
         
     # Format alerts
-    alerts = db.query(models.SafetyAlert).filter(models.SafetyAlert.patient_id == patient.id).all()
+    alerts = db.query(models.SafetyAlert).filter(models.SafetyAlert.patient_id == patient.id).all() if has_clinical_overview else []
     formatted_alerts = []
     for a in alerts:
         formatted_alerts.append({

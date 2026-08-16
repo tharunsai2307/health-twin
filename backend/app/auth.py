@@ -9,7 +9,15 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from . import models
 
-SECRET_KEY = os.getenv("SECRET_KEY", "healthtwin-super-secret-key-1234567890abcdef")
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    # In production, fail fast if secret not set
+    if os.getenv("ENV", "development").lower() == "production":
+        raise RuntimeError("JWT_SECRET environment variable is required in production")
+    # In development, provide a temporary insecure secret
+    JWT_SECRET = "dev-insecure-secret-key"
+else:
+    JWT_SECRET = JWT_SECRET
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30 * 24 * 60 # 30 days
 
@@ -32,7 +40,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
     return encoded_jwt
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> models.User:
@@ -44,7 +52,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if not token:
         raise credentials_exception
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
